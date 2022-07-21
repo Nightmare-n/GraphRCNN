@@ -253,8 +253,7 @@ def rotate_nms_pcdet(boxes, scores, thresh, pre_maxsize=None, post_max_size=None
     :return:
     """
     # transform back to pcdet's coordinate
-    boxes = boxes[:, [0, 1, 2, 4, 3, 5, -1]]
-    boxes[:, -1] = -boxes[:, -1] - np.pi /2
+    boxes = to_pcdet(boxes)
 
     order = scores.sort(0, descending=True)[1]
     if pre_maxsize is not None:
@@ -275,3 +274,45 @@ def rotate_nms_pcdet(boxes, scores, thresh, pre_maxsize=None, post_max_size=None
         selected = selected[:post_max_size]
 
     return selected 
+
+
+def to_pcdet(boxes):
+    # transform back to pcdet's coordinate
+    boxes = boxes[..., [0, 1, 2, 4, 3, 5, -1]]
+    boxes[..., -1] = -boxes[..., -1] - np.pi/2
+    return boxes
+
+
+def rotate_points_along_z_pcdet(points, angle):
+    """
+    Args:
+        points: (B, N, 3 + C)
+        angle: (B), angle along z-axis, angle increases x ==> y
+    Returns:
+    """
+    cosa = torch.cos(angle)
+    sina = torch.sin(angle)
+    zeros = angle.new_zeros(points.shape[0])
+    ones = angle.new_ones(points.shape[0])
+    rot_matrix = torch.stack((
+        cosa,  sina, zeros,
+        -sina, cosa, zeros,
+        zeros, zeros, ones
+    ), dim=1).view(-1, 3, 3).float()
+    points_rot = torch.matmul(points[:, :, 0:3], rot_matrix)
+    points_rot = torch.cat((points_rot, points[:, :, 3:]), dim=-1)
+    return points_rot
+
+
+def enlarge_box3d(boxes3d, extra_width=(0, 0, 0)):
+    """
+    Args:
+        boxes3d: [x, y, z, dx, dy, dz, heading], (x, y, z) is the box center
+        extra_width: [extra_x, extra_y, extra_z]
+
+    Returns:
+
+    """
+    large_boxes3d = boxes3d.clone()
+    large_boxes3d[:, 3:6] += boxes3d.new_tensor(extra_width)[None, :]
+    return large_boxes3d

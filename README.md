@@ -14,3 +14,10 @@ If you find this project useful in your research, please consider citing:
     year = {2022},
 }
 ```
+
+## Acknowledgement
+This project is mainly based on the following code base. Thanks to them for their great contribution.
+
+* [MMDetection3D](https://github.com/open-mmlab/mmdetection3d)
+* [CenterPoint](https://github.com/tianweiy/CenterPoint)
+* [OpenPCDet](https://github.com/open-mmlab/OpenPCDet)
