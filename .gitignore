@@ -1,7 +1,6 @@
-**__pycache__**
-**build**
-**egg-info**
-**dist**
+__pycache__/
+build/
+**egg-info/
 data/
 *.pyc
 venv/
@@ -14,3 +13,4 @@ venv/
 *.zip
 *.bin
 .vscode/
+work_dirs/
