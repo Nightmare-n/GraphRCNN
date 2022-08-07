@@ -1,6 +1,5 @@
 #include <torch/serialize/tensor.h>
 #include <vector>
-#include <THC/THC.h>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include "patch_query_gpu.h"
