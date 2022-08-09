@@ -1,4 +1,4 @@
-[![arXiv](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)](https://arxiv.org/abs/placeholder)
+[![arXiv](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)](https://arxiv.org/abs/2208.03624)
 [![GitHub Stars](https://img.shields.io/github/stars/Nightmare-n/GraphRCNN?style=social)](https://github.com/Nightmare-n/GraphRCNN)
 ![visitors](https://visitor-badge.glitch.me/badge?page_id=Nightmare-n/GraphRCNN)
 
@@ -16,7 +16,7 @@ If you find this project useful in your research, please consider citing:
 ```
 
 ## Acknowledgement
-This project is mainly based on the following codebases. Thanks to them for their great contribution.
+This project is mainly based on the following codebases. Thanks for their great works!
 
 * [MMDetection3D](https://github.com/open-mmlab/mmdetection3d)
 * [CenterPoint](https://github.com/tianweiy/CenterPoint)
