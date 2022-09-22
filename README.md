@@ -59,7 +59,7 @@ We show the reproduced results based on the latest version of the [CenterPoint](
 
 |       | Vec_L1 | Vec_L2 | Ped_L1 | Ped_L2 | Cyc_L1 | Cyc_L2 | All |
 |-------|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|
-|[Graph R-CNN (w/o PointNet)](configs/waymo/voxelnet/two_stage/waymo_centerpoint_voxelnet_graphrcnn_6epoch_freeze.py)| 80.46/79.97|72.27/71.82|82.01/76.49|74.13/68.90|77.63/76.50|74.87/73.78| [Download](https://drive.google.com/file/d/1FVMXfof-dI9ThSxkBxprjHBKT_FVMjBe/view?usp=sharing) |
+|[Graph R-CNN (w/o PointNet)](configs/waymo/voxelnet/two_stage/waymo_centerpoint_voxelnet_graphrcnn_6epoch_freeze.py)| 80.46/79.97|72.27/71.82|82.01/76.49|74.13/68.90|77.63/76.50|74.87/73.78| [Log](https://drive.google.com/file/d/1FVMXfof-dI9ThSxkBxprjHBKT_FVMjBe/view?usp=sharing) |
 
 ## Citation 
 If you find this project useful in your research, please consider citing:
