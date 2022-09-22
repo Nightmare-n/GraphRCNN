@@ -3,6 +3,14 @@
 ![visitors](https://visitor-badge.glitch.me/badge?page_id=Nightmare-n/GraphRCNN)
 
 # Graph R-CNN: Towards Accurate 3D Object Detection with Semantic-Decorated Local Graph (ECCV 2022, Oral)
+
+## NEWS
+[2022-09-30] Code for the [Waymo Open Dataset](https://waymo.com/open/download/) is released.
+
+[2022-07-04] Graph R-CNN is accepted at ECCV 2022.
+
+[2021-12-26] We rank 1st on the KITTI BEV car detection leaderboard. 
+
 ## Installation
 We test this project on NVIDIA A100 GPUs and Ubuntu 18.04.
 ```
@@ -14,6 +22,7 @@ pip install torch-scatter -f https://data.pyg.org/whl/torch-1.10.1+cu111.html
 git clone https://github.com/Nightmare-n/GraphRCNN
 cd GraphRCNN && python setup.py develop --user
 ```
+
 ## Data Preparation
 * Please download the official [Waymo Open Dataset](https://waymo.com/open/download/), 
 including the training data `training_0000.tar~training_0031.tar` and the validation 
