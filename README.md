@@ -5,11 +5,14 @@
 # Graph R-CNN: Towards Accurate 3D Object Detection with Semantic-Decorated Local Graph (ECCV 2022, Oral)
 
 ## NEWS
-[2022-09-30] Code for the [Waymo Open Dataset](https://waymo.com/open/download/) is released.
+[2022-09-30] Code for the [Waymo Open Dataset](https://waymo.com/open/download/) is released :rocket:!
 
-[2022-07-04] Graph R-CNN is accepted at ECCV 2022.
+[2022-07-04] Graph R-CNN is accepted at ECCV 2022 :fire:!
 
-[2021-12-26] We rank 1st on the KITTI BEV car detection leaderboard. 
+[2021-12-26] We rank **1st** on the KITTI BEV car detection leaderboard :fire:! 
+<p align="center">
+   <img src="figures/kitti_bev_leaderboard.png" width="80%"> 
+</p>
 
 ## Installation
 We test this project on NVIDIA A100 GPUs and Ubuntu 18.04.
