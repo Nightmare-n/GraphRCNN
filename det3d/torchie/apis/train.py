@@ -3,12 +3,6 @@ from __future__ import division
 import re
 from collections import OrderedDict, defaultdict
 from functools import partial
-
-try:
-    import apex
-except:
-    print("No APEX!")
-
 import numpy as np
 import torch
 from det3d.builder import _create_learning_rate_scheduler
@@ -265,7 +259,7 @@ def train_detector(model, dataset, cfg, distributed=False, validate=False, logge
     total_steps = cfg.total_epochs * len(data_loaders[0])
     # print(f"total_steps: {total_steps}")
     if distributed:
-        model = apex.parallel.convert_syncbn_model(model)
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     if cfg.lr_config.type == "one_cycle":
         # build trainer
         optimizer = build_one_cycle_optimizer(model, cfg.optimizer)
@@ -286,7 +280,7 @@ def train_detector(model, dataset, cfg, distributed=False, validate=False, logge
             device_ids=[cfg.local_rank],
             output_device=cfg.local_rank,
             # broadcast_buffers=False,
-            find_unused_parameters=True,
+            find_unused_parameters=False,
         )
     else:
         model = model.cuda()

@@ -1,3 +1,4 @@
+from distutils import file_util
 import sys
 import pickle
 import json
@@ -13,6 +14,7 @@ from copy import deepcopy
 from det3d.datasets.custom import PointCloudDataset
 
 from det3d.datasets.registry import DATASETS
+from det3d.utils import file_client
 
 
 @DATASETS.register_module
@@ -23,7 +25,7 @@ class WaymoDataset(PointCloudDataset):
         self,
         info_path,
         root_path,
-        cfg=None,
+        client_cfg,
         pipeline=None,
         class_names=None,
         test_mode=False,
@@ -35,6 +37,9 @@ class WaymoDataset(PointCloudDataset):
         self.load_interval = load_interval 
         self.sample = sample
         self.nsweeps = nsweeps
+        self.client = getattr(file_client, client_cfg['name'])(
+            **client_cfg.get('kwargs', {})
+        )
         print("Using {} sweeps".format(nsweeps))
         super(WaymoDataset, self).__init__(
             root_path, info_path, pipeline, test_mode=test_mode, class_names=class_names
@@ -48,9 +53,7 @@ class WaymoDataset(PointCloudDataset):
         assert False 
 
     def load_infos(self, info_path):
-
-        with open(self._info_path, "rb") as f:
-            _waymo_infos_all = pickle.load(f)
+        _waymo_infos_all = self.client.load_pickle(self._info_path)
 
         self._waymo_infos = _waymo_infos_all[::self.load_interval]
 
@@ -97,7 +100,7 @@ class WaymoDataset(PointCloudDataset):
         infos = self._waymo_infos 
         infos = reorganize_info(infos)
 
-        _create_pd_detection(detections, infos, output_dir)
+        _create_pd_detection(detections, infos, output_dir, self.client)
 
         print("use waymo devkit tool for evaluation")
 

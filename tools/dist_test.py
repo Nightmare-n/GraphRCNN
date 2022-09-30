@@ -3,11 +3,6 @@ import copy
 import json
 import os
 import sys
-
-try:
-    import apex
-except:
-    print("No APEX!")
 import numpy as np
 import torch
 import yaml
@@ -86,9 +81,7 @@ def main():
     if args.work_dir is not None:
         cfg.work_dir = args.work_dir
 
-    distributed = False
-    if "WORLD_SIZE" in os.environ:
-        distributed = int(os.environ["WORLD_SIZE"]) > 1
+    distributed = False if args.launcher == 'none' else True
 
     if distributed:
         torch.cuda.set_device(args.local_rank)
@@ -124,13 +117,13 @@ def main():
 
     # put model on gpus
     if distributed:
-        model = apex.parallel.convert_syncbn_model(model)
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = DistributedDataParallel(
             model.cuda(cfg.local_rank),
             device_ids=[cfg.local_rank],
             output_device=cfg.local_rank,
             # broadcast_buffers=False,
-            find_unused_parameters=True,
+            find_unused_parameters=False,
         )
     else:
         # model = fuse_bn_recursively(model)

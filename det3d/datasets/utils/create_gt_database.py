@@ -16,6 +16,7 @@ dataset_name_map = {
 def create_groundtruth_database(
     dataset_class_name,
     data_path,
+    client_cfg,
     info_path=None,
     used_classes=None,
     db_path=None,
@@ -28,6 +29,7 @@ def create_groundtruth_database(
         {
             "type": "LoadPointCloudFromFile",
             "dataset": dataset_name_map[dataset_class_name],
+            "client_cfg": client_cfg
         },
         {"type": "LoadPointCloudAnnotations", "with_bbox": True},
     ]
@@ -36,6 +38,7 @@ def create_groundtruth_database(
         dataset = get_dataset(dataset_class_name)(
             info_path=info_path,
             root_path=data_path,
+            client_cfg=client_cfg,
             pipeline=pipeline,
             test_mode=True,
             nsweeps=kwargs["nsweeps"],
@@ -44,7 +47,7 @@ def create_groundtruth_database(
         nsweeps = dataset.nsweeps
     else:
         dataset = get_dataset(dataset_class_name)(
-            info_path=info_path, root_path=data_path, test_mode=True, pipeline=pipeline
+            info_path=info_path, root_path=data_path, client_cfg=client_cfg, test_mode=True, pipeline=pipeline
         )
         nsweeps = 1
 
@@ -63,8 +66,6 @@ def create_groundtruth_database(
                 dbinfo_path = root_path / f"dbinfos_train_{nsweeps}sweeps_withvelo.pkl"
     else:
         raise NotImplementedError()
-
-    db_path.mkdir(parents=True, exist_ok=True)
 
     all_db_infos = {}
     group_counter = 0
@@ -119,18 +120,10 @@ def create_groundtruth_database(
         for i in range(num_obj):
             if (used_classes is None) or names[i] in used_classes:
                 filename = f"{image_idx}_{names[i]}_{i}.bin"
-                dirpath = os.path.join(str(db_path), names[i])
-                os.makedirs(dirpath, exist_ok=True)
-
                 filepath = os.path.join(str(db_path), names[i], filename)
                 gt_points = points[point_indices[:, i]]
                 gt_points[:, :3] -= gt_boxes[i, :3]
-                with open(filepath, "w") as f:
-                    try:
-                        gt_points.tofile(f)
-                    except:
-                        print("process {} files".format(index))
-                        break
+                dataset.client.put(gt_points.tobytes(), filepath)
 
             if (used_classes is None) or names[i] in used_classes:
                 if relative_path:
@@ -166,5 +159,4 @@ def create_groundtruth_database(
     for k, v in all_db_infos.items():
         print(f"load {len(v)} {k} database infos")
 
-    with open(dbinfo_path, "wb") as f:
-        pickle.dump(all_db_infos, f)
+    dataset.client.dump_pickle(all_db_infos, dbinfo_path)

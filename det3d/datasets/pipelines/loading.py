@@ -12,6 +12,8 @@ from det3d.core import box_np_ops
 import pickle 
 import os 
 from ..registry import PIPELINES
+from det3d.utils import file_client
+
 
 def _dict_select(dict_, inds):
     for k, v in dict_.items():
@@ -20,10 +22,10 @@ def _dict_select(dict_, inds):
         else:
             dict_[k] = v[inds]
 
-def read_file(path, tries=2, num_point_feature=4, virtual=False):
+def read_file(path, client, tries=2, num_point_feature=4, virtual=False):
     if virtual:
         # WARNING: hard coded for nuScenes 
-        points = np.fromfile(path, dtype=np.float32).reshape(-1, 5)[:, :num_point_feature]
+        points = client.load_to_numpy(path, dtype=np.float32).reshape(-1, 5)[:, :num_point_feature]
         tokens = path.split('/')
         seg_path = os.path.join(*tokens[:-2], tokens[-2]+"_VIRTUAL", tokens[-1]+'.pkl.npy')
         data_dict = np.load(seg_path, allow_pickle=True).item()
@@ -37,7 +39,7 @@ def read_file(path, tries=2, num_point_feature=4, virtual=False):
         virtual_points2 = np.concatenate([virtual_points2, -1 * np.ones([virtual_points2.shape[0], 1])], axis=1)
         points = np.concatenate([points, virtual_points1, virtual_points2], axis=0).astype(np.float32)
     else:
-        points = np.fromfile(path, dtype=np.float32).reshape(-1, 5)[:, :num_point_feature]
+        points = client.load_to_numpy(path, dtype=np.float32).reshape(-1, 5)[:, :num_point_feature]
 
     return points
 
@@ -54,9 +56,9 @@ def remove_close(points, radius: float) -> None:
     return points
 
 
-def read_sweep(sweep, virtual=False):
+def read_sweep(sweep, client, virtual=False):
     min_distance = 1.0
-    points_sweep = read_file(str(sweep["lidar_path"]), virtual=virtual).T
+    points_sweep = read_file(str(sweep["lidar_path"]), client, virtual=virtual).T
     points_sweep = remove_close(points_sweep, min_distance)
 
     nbr_points = points_sweep.shape[1]
@@ -79,8 +81,8 @@ def read_single_waymo(obj):
     
     return points 
 
-def read_single_waymo_sweep(sweep):
-    obj = get_obj(sweep['path'])
+def read_single_waymo_sweep(sweep, client):
+    obj = get_obj(sweep['path'], client)
 
     points_xyz = obj["lidars"]["points_xyz"]
     points_feature = obj["lidars"]["points_feature"]
@@ -101,16 +103,17 @@ def read_single_waymo_sweep(sweep):
     return points_sweep.T, curr_times.T
 
 
-def get_obj(path):
-    with open(path, 'rb') as f:
-            obj = pickle.load(f)
-    return obj 
+def get_obj(path, client):
+    return client.load_pickle(path)
 
 
 @PIPELINES.register_module
 class LoadPointCloudFromFile(object):
-    def __init__(self, dataset="KittiDataset", **kwargs):
+    def __init__(self, dataset="KittiDataset", client_cfg={}, **kwargs):
         self.type = dataset
+        self.client = getattr(file_client, client_cfg['name'])(
+            **client_cfg.get('kwargs', {})
+        )
         self.random_select = kwargs.get("random_select", False)
         self.npoints = kwargs.get("npoints", 16834)
 
@@ -123,7 +126,7 @@ class LoadPointCloudFromFile(object):
             nsweeps = res["lidar"]["nsweeps"]
 
             lidar_path = Path(info["lidar_path"])
-            points = read_file(str(lidar_path), virtual=res["virtual"])
+            points = read_file(str(lidar_path), self.client, virtual=res["virtual"])
 
             sweep_points_list = [points]
             sweep_times_list = [np.zeros((points.shape[0], 1))]
@@ -136,7 +139,7 @@ class LoadPointCloudFromFile(object):
 
             for i in np.random.choice(len(info["sweeps"]), nsweeps - 1, replace=False):
                 sweep = info["sweeps"][i]
-                points_sweep, times_sweep = read_sweep(sweep, virtual=res["virtual"])
+                points_sweep, times_sweep = read_sweep(sweep, self.client, virtual=res["virtual"])
                 sweep_points_list.append(points_sweep)
                 sweep_times_list.append(times_sweep)
 
@@ -150,7 +153,7 @@ class LoadPointCloudFromFile(object):
         elif self.type == "WaymoDataset":
             path = info['path']
             nsweeps = res["lidar"]["nsweeps"]
-            obj = get_obj(path)
+            obj = get_obj(path, self.client)
             points = read_single_waymo(obj)
             res["lidar"]["points"] = points
 
@@ -166,7 +169,7 @@ class LoadPointCloudFromFile(object):
 
                 for i in range(nsweeps - 1):
                     sweep = info["sweeps"][i]
-                    points_sweep, times_sweep = read_single_waymo_sweep(sweep)
+                    points_sweep, times_sweep = read_single_waymo_sweep(sweep, self.client)
                     sweep_points_list.append(points_sweep)
                     sweep_times_list.append(times_sweep)
 

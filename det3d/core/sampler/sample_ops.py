@@ -14,6 +14,7 @@ class DataBaseSamplerV2:
     def __init__(
         self,
         db_infos,
+        client,
         groups,
         db_prepor=None,
         rate=1.0,
@@ -30,6 +31,7 @@ class DataBaseSamplerV2:
                 logger.info(f"load {len(v)} {k} database infos")
 
         self.db_infos = db_infos
+        self.client = client
         self._rate = rate
         self._groups = groups
         self._group_db_infos = {}
@@ -177,7 +179,7 @@ class DataBaseSamplerV2:
             s_points_list = []
             for info in sampled:
                 try:
-                    s_points = np.fromfile(
+                    s_points = self.client.load_to_numpy(
                         str(pathlib.Path(root_path) / info["path"]), dtype=np.float32
                     ).reshape(-1, num_point_features)
 

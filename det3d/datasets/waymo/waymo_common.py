@@ -12,11 +12,11 @@ from tqdm import tqdm
 import argparse
 
 from tqdm import tqdm
-try:
-    import tensorflow as tf
-    tf.enable_eager_execution()
-except:
-    print("No Tensorflow")
+# try:
+#     import tensorflow as tf
+#     tf.enable_eager_execution()
+# except:
+#     print("No Tensorflow")
 
 from nuscenes.utils.geometry_utils import transform_matrix
 from pyquaternion import Quaternion
@@ -30,10 +30,8 @@ CAT_NAME_TO_ID = {
 }
 TYPE_LIST = ['UNKNOWN', 'VEHICLE', 'PEDESTRIAN', 'SIGN', 'CYCLIST']
 
-def get_obj(path):
-    with open(path, 'rb') as f:
-            obj = pickle.load(f)
-    return obj 
+def get_obj(path, client):
+    return client.load_pickle(path)
 
 # ignore sign class 
 LABEL_TO_TYPE = {0: 1, 1:2, 2:4}
@@ -49,7 +47,7 @@ class UUIDGeneration():
         return self.mapping[seed]
 uuid_gen = UUIDGeneration()
 
-def _create_pd_detection(detections, infos, result_path, tracking=False):
+def _create_pd_detection(detections, infos, result_path, client, tracking=False):
     """Creates a prediction objects file."""
     from waymo_open_dataset import label_pb2
     from waymo_open_dataset.protos import metrics_pb2
@@ -58,7 +56,7 @@ def _create_pd_detection(detections, infos, result_path, tracking=False):
 
     for token, detection in tqdm(detections.items()):
         info = infos[token]
-        obj = get_obj(info['anno_path'])
+        obj = get_obj(info['anno_path'], client)
 
         box3d = detection["box3d_lidar"].detach().cpu().numpy()
         scores = detection["scores"].detach().cpu().numpy()
@@ -114,64 +112,6 @@ def _create_pd_detection(detections, infos, result_path, tracking=False):
     f.write(objects.SerializeToString())
     f.close()
 
-def _create_gt_detection(infos, tracking=True):
-    """Creates a gt prediction object file for local evaluation."""
-    from waymo_open_dataset import label_pb2
-    from waymo_open_dataset.protos import metrics_pb2
-    
-    objects = metrics_pb2.Objects()
-
-    for idx in tqdm(range(len(infos))): 
-        info = infos[idx]
-
-        obj = get_obj(info['anno_path'])
-        annos = obj['objects']
-        num_points_in_gt = np.array([ann['num_points'] for ann in annos])
-        box3d = np.array([ann['box'] for ann in annos])
-
-        if len(box3d) == 0:
-            continue 
-
-        names = np.array([TYPE_LIST[ann['label']] for ann in annos])
-
-        box3d = box3d[:, [0, 1, 2, 3, 4, 5, -1]]
-
-        for i in range(box3d.shape[0]):
-            if num_points_in_gt[i] == 0:
-                continue 
-            if names[i] == 'UNKNOWN':
-                continue 
-
-            det  = box3d[i]
-            score = 1.0
-            label = names[i]
-
-            o = metrics_pb2.Object()
-            o.context_name = obj['scene_name']
-            o.frame_timestamp_micros = int(obj['frame_name'].split("_")[-1])
-
-            # Populating box and score.
-            box = label_pb2.Label.Box()
-            box.center_x = det[0]
-            box.center_y = det[1]
-            box.center_z = det[2]
-            box.length = det[3]
-            box.width = det[4]
-            box.height = det[5]
-            box.heading = det[-1]
-            o.object.box.CopyFrom(box)
-            o.score = score
-            # Use correct type.
-            o.object.type = CAT_NAME_TO_ID[label]
-            o.object.num_lidar_points_in_box = num_points_in_gt[i]
-            o.object.id = annos[i]['name']
-
-            objects.objects.append(o)
-        
-    # Write objects to a file.
-    f = open(os.path.join(args.result_path, 'gt_preds.bin'), 'wb')
-    f.write(objects.SerializeToString())
-    f.close()
 
 def veh_pos_to_transform(veh_pos):
     "convert vehicle pose to two transformation matrix"
@@ -188,14 +128,14 @@ def veh_pos_to_transform(veh_pos):
 
     return global_from_car, car_from_global
 
-def _fill_infos(root_path, frames, split='train', nsweeps=1):
+def _fill_infos(root_path, client, processed_data_tag, frames, split='train', nsweeps=1):
     # load all train infos
     infos = []
     for frame_name in tqdm(frames):  # global id
-        lidar_path = os.path.join(root_path, split, 'lidar', frame_name)
-        ref_path = os.path.join(root_path, split, 'annos', frame_name)
+        lidar_path = os.path.join(root_path, processed_data_tag, split, 'lidar', frame_name)
+        ref_path = os.path.join(root_path, processed_data_tag, split, 'annos', frame_name)
 
-        ref_obj = get_obj(ref_path)
+        ref_obj = get_obj(ref_path, client)
         ref_time = 1e-6 * int(ref_obj['frame_name'].split("_")[-1])
 
         ref_pose = np.reshape(ref_obj['veh_to_global'], [4, 4])
@@ -231,10 +171,10 @@ def _fill_infos(root_path, frames, split='train', nsweeps=1):
                 # global identifier  
 
                 curr_name = 'seq_{}_frame_{}.pkl'.format(sequence_id, prev_id)
-                curr_lidar_path = os.path.join(root_path, split, 'lidar', curr_name)
-                curr_label_path = os.path.join(root_path, split, 'annos', curr_name)
+                curr_lidar_path = os.path.join(root_path, processed_data_tag, split, 'lidar', curr_name)
+                curr_label_path = os.path.join(root_path, processed_data_tag, split, 'annos', curr_name)
                 
-                curr_obj = get_obj(curr_label_path)
+                curr_obj = get_obj(curr_label_path, client)
                 curr_pose = np.reshape(curr_obj['veh_to_global'], [4, 4])
                 global_from_car, _ = veh_pos_to_transform(curr_pose) 
                 
@@ -294,9 +234,9 @@ def sort_frame(frames):
     frames = [frames[r] for r in rank]
     return frames
 
-def get_available_frames(root, split):
-    dir_path = os.path.join(root, split, 'lidar')
-    available_frames = list(os.listdir(dir_path))
+def get_available_frames(root, client, processed_data_tag, split):
+    dir_path = os.path.join(root, processed_data_tag, split, 'lidar')
+    available_frames = list(client.list_dir_or_file(dir_path))
 
     sorted_frames = sort_frame(available_frames)
 
@@ -304,20 +244,17 @@ def get_available_frames(root, split):
     return sorted_frames
 
 
-def create_waymo_infos(root_path, split='train', nsweeps=1):
-    frames = get_available_frames(root_path, split)
+def create_waymo_infos(root_path, client, processed_data_tag, split='train', nsweeps=1):
+    frames = get_available_frames(root_path, client, processed_data_tag, split)
 
     waymo_infos = _fill_infos(
-        root_path, frames, split, nsweeps
+        root_path, client, processed_data_tag, frames, split, nsweeps
     )
 
     print(
         f"sample: {len(waymo_infos)}"
     )
-    with open(
-        os.path.join(root_path, "infos_"+split+"_{:02d}sweeps_filter_zero_gt.pkl".format(nsweeps)), "wb"
-    ) as f:
-        pickle.dump(waymo_infos, f)
+    client.dump_pickle(waymo_infos, os.path.join(root_path, "infos_"+split+"_{:02d}sweeps_filter_zero_gt.pkl".format(nsweeps)))
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Waymo 3D Extractor")

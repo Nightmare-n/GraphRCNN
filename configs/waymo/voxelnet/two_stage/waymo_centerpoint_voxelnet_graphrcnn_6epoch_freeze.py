@@ -16,34 +16,83 @@ target_assigner = dict(
 
 # model settings
 model = dict(
-    type="VoxelNet",
-    pretrained=None,
-    reader=dict(
-        type="DynamicVoxelEncoder",
-        pc_range=[-75.2, -75.2, -2, 75.2, 75.2, 4],
-        voxel_size=[0.1, 0.1, 0.15]
+    type='TwoStageDetector',
+    first_stage_cfg=dict(
+        type="VoxelNet",
+        pretrained='work_dirs/waymo_centerpoint_voxelnet_3x/epoch_36.pth',
+        reader=dict(
+            type="DynamicVoxelEncoder",
+            pc_range=[-75.2, -75.2, -2, 75.2, 75.2, 4],
+            voxel_size=[0.1, 0.1, 0.15]
+        ),
+        backbone=dict(
+            type="SpMiddleResNetFHD", num_input_features=5, ds_factor=8
+        ),
+        neck=dict(
+            type="RPN",
+            layer_nums=[5, 5],
+            ds_layer_strides=[1, 2],
+            ds_num_filters=[128, 256],
+            us_layer_strides=[1, 2],
+            us_num_filters=[256, 256],
+            num_input_features=256,
+            logger=logging.getLogger("RPN"),
+        ),
+        bbox_head=dict(
+            type="CenterHead",
+            in_channels=sum([256, 256]),
+            tasks=tasks,
+            dataset='waymo',
+            weight=2,
+            code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            common_heads={'reg': (2, 2), 'height': (1, 2), 'dim':(3, 2), 'rot':(2, 2)}, # (output_channel, num_conv)
+        ),
     ),
-    backbone=dict(
-        type="SpMiddleResNetFHD", num_input_features=5, ds_factor=8),
-    neck=dict(
-        type="RPN",
-        layer_nums=[5, 5],
-        ds_layer_strides=[1, 2],
-        ds_num_filters=[128, 256],
-        us_layer_strides=[1, 2],
-        us_num_filters=[256, 256],
-        num_input_features=256,
-        logger=logging.getLogger("RPN"),
+    roi_head=dict(
+        type="GraphRCNNHead",
+        input_channels=11,
+        model_cfg=dict(
+            CLASS_AGNOSTIC=True,
+
+            DFVS_CONFIG=dict(
+                NUM_DVS_POINTS=1024,
+                NUM_FPS_POINTS=256,
+                HASH_SIZE=4099,
+                LAMBDA=0.18,
+                DELTA=50,
+                POOL_EXTRA_WIDTH=[0.8, 0.8, 0.8],
+                NUM_BOXES_PER_PATCH=32
+            ),
+            ATTN_GNN_CONFIG=dict(
+                MLPS=[32, 32, 64],
+                USE_FEATS_DIS=False,
+            ),
+            TARGET_CONFIG=dict(
+                ROI_PER_IMAGE=128,
+                FG_RATIO=0.5,
+                SAMPLE_ROI_BY_EACH_CLASS=True,
+                CLS_SCORE_TYPE='roi_iou',
+                CLS_FG_THRESH=0.75,
+                CLS_BG_THRESH=0.25,
+                CLS_BG_THRESH_LO=0.1,
+                HARD_BG_RATIO=0.8,
+                REG_FG_THRESH=0.55
+            ),
+            LOSS_CONFIG=dict(
+                CLS_LOSS='BinaryCrossEntropy',
+                REG_LOSS='L1',
+                LOSS_WEIGHTS={
+                    'rcnn_cls_weight': 1.0,
+                    'rcnn_reg_weight': 1.0,
+                    'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+                }
+            )
+        ),
+        code_size=7,
+        pc_range=[-75.2, -75.2, -2, 75.2, 75.2, 4]
     ),
-    bbox_head=dict(
-        type="CenterHead",
-        in_channels=sum([256, 256]),
-        tasks=tasks,
-        dataset='waymo',
-        weight=2,
-        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        common_heads={'reg': (2, 2), 'height': (1, 2), 'dim':(3, 2), 'rot':(2, 2)}, # (output_channel, num_conv)
-    ),
+    NMS_POST_MAXSIZE=500,
+    freeze=True
 )
 
 assigner = dict(
@@ -63,6 +112,7 @@ train_cfg = dict(assigner=assigner)
 
 test_cfg = dict(
     post_center_limit_range=[-80, -80, -10.0, 80, 80, 10.0],
+    max_per_img=4096,
     nms=dict(
         use_rotate_nms=True,
         use_multi_class_nms=False,
@@ -73,7 +123,7 @@ test_cfg = dict(
     score_threshold=0.1,
     pc_range=[-75.2, -75.2],
     out_size_factor=get_downsample_factor(model),
-    voxel_size=[0.1, 0.1],
+    voxel_size=[0.1, 0.1]
 )
 
 
@@ -82,7 +132,7 @@ dataset_type = "WaymoDataset"
 nsweeps = 1
 data_root = "/data/waymo"
 client_cfg = dict(
-    name="HardDiskBackend"
+    name="HardDiskBackend",
 )
 
 db_sampler = dict(
@@ -107,7 +157,7 @@ db_sampler = dict(
     ],
     global_random_rotation_range_per_object=[0, 0],
     rate=1.0,
-) 
+)  
 
 train_preprocessor = dict(
     mode="train",
@@ -170,6 +220,7 @@ data = dict(
         info_path=test_anno,
         client_cfg=client_cfg,
         nsweeps=nsweeps,
+        test_mode=True,
         class_names=class_names,
         pipeline=test_pipeline,
     ),
@@ -198,11 +249,11 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 36
+total_epochs = 6
 device_ids = range(4)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
 work_dir = './work_dirs/{}/'.format(__file__[__file__.rfind('/') + 1:-3])
 load_from = None 
-resume_from = None  
+resume_from = None
 workflow = [('train', 1)]

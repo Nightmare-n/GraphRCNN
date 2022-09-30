@@ -43,10 +43,11 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=None, help="random seed")
     parser.add_argument(
         "--launcher",
-        choices=["pytorch", "slurm"],
-        default="pytorch",
+        choices=["none", "pytorch", "slurm"],
+        default="none",
         help="job launcher",
     )
+    parser.add_argument('--tcp_port', type=int, default=18888, help='tcp port for distrbuted training')
     parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument(
         "--autoscale-lr",
@@ -77,9 +78,7 @@ def main():
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
 
-    distributed = False
-    if "WORLD_SIZE" in os.environ:
-        distributed = int(os.environ["WORLD_SIZE"]) > 1
+    distributed = False if args.launcher == 'none' else True
 
     if distributed:
         if args.launcher == "pytorch":
@@ -96,17 +95,8 @@ def main():
             addr = subprocess.getoutput(
                 f"scontrol show hostname {node_list} | head -n1")
             # specify master port
-            port = None
-            if port is not None:
-                os.environ["MASTER_PORT"] = str(port)
-            elif "MASTER_PORT" in os.environ:
-                pass  # use MASTER_PORT in the environment variable
-            else:
-                # 29500 is torch.distributed default port
-                os.environ["MASTER_PORT"] = "29501"
-            # use MASTER_ADDR in the environment variable if it already exists
-            if "MASTER_ADDR" not in os.environ:
-                os.environ["MASTER_ADDR"] = addr
+            os.environ["MASTER_PORT"] = str(args.tcp_port)
+            os.environ["MASTER_ADDR"] = addr
             os.environ["WORLD_SIZE"] = str(ntasks)
             os.environ["LOCAL_RANK"] = str(proc_id % num_gpus)
             os.environ["RANK"] = str(proc_id)
@@ -126,10 +116,10 @@ def main():
     logger.info("Distributed training: {}".format(distributed))
     logger.info(f"torch.backends.cudnn.benchmark: {torch.backends.cudnn.benchmark}")
 
-    if args.local_rank == 0:
+    # if args.local_rank == 0:
         # copy important files to backup
-        backup_dir = os.path.join(cfg.work_dir, "det3d")
-        os.makedirs(backup_dir, exist_ok=True)
+        # backup_dir = os.path.join(cfg.work_dir, "det3d")
+        # os.makedirs(backup_dir, exist_ok=True)
         # os.system("cp -r * %s/" % backup_dir)
         # logger.info(f"Backup source files to {cfg.work_dir}/det3d")
 

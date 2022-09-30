@@ -71,16 +71,7 @@ class RoIHeadTemplate(nn.Module):
             ).view(batch_size, -1, 3)[..., :2]
             """
 
-        # flip orientation if rois have opposite orientation
-        heading_label = gt_of_rois[:, :, 6] % (2 * np.pi)  # 0 ~ 2pi
-        opposite_flag = (heading_label > np.pi * 0.5) & (heading_label < np.pi * 1.5)
-        heading_label[opposite_flag] = (heading_label[opposite_flag] + np.pi) % (2 * np.pi)  # (0 ~ pi/2, 3pi/2 ~ 2pi)
-        flag = heading_label > np.pi
-        heading_label[flag] = heading_label[flag] - np.pi * 2  # (-pi/2, pi/2)
-        heading_label = torch.clamp(heading_label, min=-np.pi / 2, max=np.pi / 2)
-
-        gt_of_rois[:, :, 6] = heading_label
-
+        gt_of_rois[:, :, 6] = limit_period(gt_of_rois[:, :, 6], offset=0.5, period=np.pi)
 
         targets_dict['gt_of_rois'] = gt_of_rois
         return targets_dict
@@ -124,10 +115,6 @@ class RoIHeadTemplate(nn.Module):
         if loss_cfgs.CLS_LOSS == 'BinaryCrossEntropy':
             rcnn_cls_flat = rcnn_cls.view(-1)
             batch_loss_cls = F.binary_cross_entropy(torch.sigmoid(rcnn_cls_flat), rcnn_cls_labels.float(), reduction='none')
-            cls_valid_mask = (rcnn_cls_labels >= 0).float()
-            rcnn_loss_cls = (batch_loss_cls * cls_valid_mask).sum() / torch.clamp(cls_valid_mask.sum(), min=1.0)
-        elif loss_cfgs.CLS_LOSS == 'CrossEntropy':
-            batch_loss_cls = F.cross_entropy(rcnn_cls, rcnn_cls_labels, reduction='none', ignore_index=-1)
             cls_valid_mask = (rcnn_cls_labels >= 0).float()
             rcnn_loss_cls = (batch_loss_cls * cls_valid_mask).sum() / torch.clamp(cls_valid_mask.sum(), min=1.0)
         else:

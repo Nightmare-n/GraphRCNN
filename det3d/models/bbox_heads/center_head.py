@@ -14,53 +14,8 @@ from torch import double, nn
 from det3d.models.losses.centernet_loss import FastFocalLoss, RegLoss
 from det3d.models.utils import Sequential
 from ..registry import HEADS
-import copy 
-try:
-    from det3d.ops.dcn import DeformConv
-except:
-    print("Deformable Convolution not built!")
+import copy
 
-from det3d.core.utils.circle_nms_jit import circle_nms
-
-class FeatureAdaption(nn.Module):
-    """Feature Adaption Module.
-
-    Feature Adaption Module is implemented based on DCN v1.
-    It uses anchor shape prediction rather than feature map to
-    predict offsets of deformable conv layer.
-
-    Args:
-        in_channels (int): Number of channels in the input feature map.
-        out_channels (int): Number of channels in the output feature map.
-        kernel_size (int): Deformable conv kernel size.
-        deformable_groups (int): Deformable conv group size.
-    """
-
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size=3,
-                 deformable_groups=4):
-        super(FeatureAdaption, self).__init__()
-        offset_channels = kernel_size * kernel_size * 2
-        self.conv_offset = nn.Conv2d(
-            in_channels, deformable_groups * offset_channels, 1, bias=True)
-        self.conv_adaption = DeformConv(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            padding=(kernel_size - 1) // 2,
-            deformable_groups=deformable_groups)
-        self.relu = nn.ReLU(inplace=True)
-        self.init_offset()
-
-    def init_offset(self):
-        self.conv_offset.weight.data.zero_()
-
-    def forward(self, x,):
-        offset = self.conv_offset(x)
-        x = self.relu(self.conv_adaption(x, offset))
-        return x
 
 class SepHead(nn.Module):
     def __init__(
@@ -108,60 +63,6 @@ class SepHead(nn.Module):
             ret_dict[head] = self.__getattr__(head)(x)
 
         return ret_dict
-
-class DCNSepHead(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        num_cls,
-        heads,
-        head_conv=64,
-        final_kernel=1,
-        bn=False,
-        init_bias=-2.19,
-        **kwargs,
-    ):
-        super(DCNSepHead, self).__init__(**kwargs)
-
-        # feature adaptation with dcn
-        # use separate features for classification / regression
-        self.feature_adapt_cls = FeatureAdaption(
-            in_channels,
-            in_channels,
-            kernel_size=3,
-            deformable_groups=4) 
-        
-        self.feature_adapt_reg = FeatureAdaption(
-            in_channels,
-            in_channels,
-            kernel_size=3,
-            deformable_groups=4)  
-
-        # heatmap prediction head 
-        self.cls_head = Sequential(
-            nn.Conv2d(in_channels, head_conv,
-            kernel_size=3, padding=1, bias=True),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(head_conv, num_cls,
-                kernel_size=3, stride=1, 
-                padding=1, bias=True)
-        )
-        self.cls_head[-1].bias.data.fill_(init_bias)
-
-        # other regression target 
-        self.task_head = SepHead(in_channels, heads, head_conv=head_conv, bn=bn, final_kernel=final_kernel)
-
-
-    def forward(self, x):    
-        center_feat = self.feature_adapt_cls(x)
-        reg_feat = self.feature_adapt_reg(x)
-
-        cls_score = self.cls_head(center_feat)
-        ret = self.task_head(reg_feat)
-        ret['hm'] = cls_score
-
-        return ret
 
 
 @HEADS.register_module
@@ -216,20 +117,12 @@ class CenterHead(nn.Module):
         self.tasks = nn.ModuleList()
         print("Use HM Bias: ", init_bias)
 
-        if dcn_head:
-            print("Use Deformable Convolution in the CenterHead!")
-
         for num_cls in num_classes:
             heads = copy.deepcopy(common_heads)
-            if not dcn_head:
-                heads.update(dict(hm=(num_cls, num_hm_conv)))
-                self.tasks.append(
-                    SepHead(share_conv_channel, heads, bn=True, init_bias=init_bias, final_kernel=3)
-                )
-            else:
-                self.tasks.append(
-                    DCNSepHead(share_conv_channel, num_cls, heads, bn=True, init_bias=init_bias, final_kernel=3)
-                )
+            heads.update(dict(hm=(num_cls, num_hm_conv)))
+            self.tasks.append(
+                SepHead(share_conv_channel, heads, bn=True, init_bias=init_bias, final_kernel=3)
+            )
 
         logger.info("Finish CenterHead Initialization")
 
@@ -470,15 +363,10 @@ class CenterHead(nn.Module):
 
             boxes_for_nms = box_preds[:, [0, 1, 2, 3, 4, 5, -1]]
 
-            if test_cfg.get('circular_nms', False):
-                centers = boxes_for_nms[:, [0, 1]] 
-                boxes = torch.cat([centers, scores.view(-1, 1)], dim=1)
-                selected = _circle_nms(boxes, min_radius=test_cfg.min_radius[task_id], post_max_size=test_cfg.nms.nms_post_max_size)  
-            else:
-                selected = box_torch_ops.rotate_nms_pcdet(boxes_for_nms.float(), scores.float(), 
-                                    thresh=test_cfg.nms.nms_iou_threshold,
-                                    pre_maxsize=test_cfg.nms.nms_pre_max_size,
-                                    post_max_size=test_cfg.nms.nms_post_max_size)
+            selected = box_torch_ops.rotate_nms_pcdet(boxes_for_nms.float(), scores.float(), 
+                                thresh=test_cfg.nms.nms_iou_threshold,
+                                pre_maxsize=test_cfg.nms.nms_pre_max_size,
+                                post_max_size=test_cfg.nms.nms_post_max_size)
 
             selected_boxes = box_preds[selected]
             selected_scores = scores[selected]
@@ -493,14 +381,3 @@ class CenterHead(nn.Module):
             prediction_dicts.append(prediction_dict)
 
         return prediction_dicts 
-
-import numpy as np 
-def _circle_nms(boxes, min_radius, post_max_size=83):
-    """
-    NMS according to center distance
-    """
-    keep = np.array(circle_nms(boxes.cpu().numpy(), thresh=min_radius))[:post_max_size]
-
-    keep = torch.from_numpy(keep).long().to(boxes.device)
-
-    return keep  
