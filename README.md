@@ -5,6 +5,8 @@
 # Graph R-CNN: Towards Accurate 3D Object Detection with Semantic-Decorated Local Graph (ECCV 2022, Oral)
 
 ## NEWS
+[2022-11-28] The result on the [Waymo Leaderboard](https://waymo.com/open/challenges/entry/?challenge=DETECTION_3D&challengeId=DETECTION_3D&emailId=50be7d97-96bd&timestamp=1669607979216614) is reported. 
+
 [2022-09-30] Code for the [Waymo Open Dataset](https://waymo.com/open/download/) is released :rocket:!
 
 [2022-07-04] Graph R-CNN is accepted at ECCV 2022 :fire:!
